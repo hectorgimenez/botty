@@ -125,38 +125,15 @@ class Mephisto:
     def _travel(self):
         self._char.pre_move()
         current_orientation = Orientation.create_by_number(self._screen, 0, False)
+        previous_orientation = current_orientation
         previous_jump_stuck = False
         while True:
             Logger.debug("Using orientation: " + str(current_orientation))
-            x_m, y_m = current_orientation.monitor_position[0], current_orientation.monitor_position[1]
-            x_m += int(random.random() * 6 - 3)
-            y_m += int(random.random() * 6 - 3)
-            t0 = self._screen.grab()
+            score, img = self._tele(current_orientation.monitor_position)
 
-            # Try to find the stairs to Level 3
-            stairs_found = self._template_finder.search(["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2"], t0,
-                                                        use_grayscale=True)
-            if stairs_found.valid:
-                self._char.move(self._screen.convert_screen_to_monitor(stairs_found.position))
-                wait(0.4, 0.6)
-                found_loading_screen_func = lambda: self._ui_manager.wait_for_loading_screen(2.0) or \
-                                                    self._template_finder.search_and_wait(
-                                                        ["NI2_SEARCH_0", "NI2_SEARCH_1"], threshold=0.8, time_out=0.5,
-                                                        use_grayscale=True).valid
-                self._char.select_by_template(["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2"],
-                                              found_loading_screen_func,
-                                              threshold=0.63)
-                return
+            if self._find_stairs(img):
+                break
 
-            self._char.move((x_m, y_m))
-            t1 = self._screen.grab()
-
-            # check difference between the two frames to determine if tele was good or not
-            diff = cv2.absdiff(t0, t1)
-            diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-            _, mask = cv2.threshold(diff, 13, 255, cv2.THRESH_BINARY)
-            score = (float(np.sum(mask)) / mask.size) * (1 / 255.0)
-            Logger.debug("Score: " + str(score))
             if score < 0.04:
                 previous_orientation = current_orientation
                 current_orientation = self._force_unstuck(current_orientation)
@@ -165,30 +142,54 @@ class Mephisto:
 
             # Try to jump again into the previous direction
             if previous_jump_stuck:
-                x_m, y_m = previous_orientation.monitor_position[0], previous_orientation.monitor_position[1]
-                x_m += int(random.random() * 6 - 3)
-                y_m += int(random.random() * 6 - 3)
-                t0 = self._screen.grab()
-                self._char.move((x_m, y_m))
-                t1 = self._screen.grab()
-
-                # check difference between the two frames to determine if tele was good or not
-                diff = cv2.absdiff(t0, t1)
-                diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-                _, mask = cv2.threshold(diff, 13, 255, cv2.THRESH_BINARY)
-                score = (float(np.sum(mask)) / mask.size) * (1 / 255.0)
-                Logger.debug("Score: " + str(score))
+                score, img = self._tele(previous_orientation.monitor_position)
                 if score < 0.04:
                     previous_jump_stuck = False
                 else:
-                    current_orientation = self._orient_based_on_walls(t1, current_orientation)
+                    current_orientation = self._orient_based_on_walls(img, current_orientation)
                     if current_orientation is None:
                         current_orientation = previous_orientation
 
-            next_orientation = self._orient_based_on_walls(t1, current_orientation)
+            next_orientation = self._orient_based_on_walls(img, current_orientation)
             if next_orientation is not None:
                 previous_orientation = current_orientation
-                current_orientation = self._orient_based_on_walls(t1, current_orientation)
+                current_orientation = self._orient_based_on_walls(img, current_orientation)
+
+    def _tele(self, position: Tuple[float, float]) -> Tuple[int, np.ndarray]:
+        x_m, y_m = position[0], position[1]
+        x_m += int(random.random() * 6 - 3)
+        y_m += int(random.random() * 6 - 3)
+        t0 = self._screen.grab()
+        self._char.move((x_m, y_m))
+        t1 = self._screen.grab()
+
+        # check difference between the two frames to determine if tele was good or not
+        diff = cv2.absdiff(t0, t1)
+        diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(diff, 13, 255, cv2.THRESH_BINARY)
+        score = (float(np.sum(mask)) / mask.size) * (1 / 255.0)
+        Logger.debug("Score: " + str(score))
+
+        return score, t1
+
+    def _find_stairs(self, img: np.ndarray) -> bool:
+        # Try to find the stairs to Level 3
+        stairs_found = self._template_finder.search(["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2"], img)
+        if stairs_found.valid:
+            Logger.debug("The Durance of Hate Level 3 stairs found!")
+            self._char.move(self._screen.convert_screen_to_monitor(stairs_found.position))
+            wait(0.4, 0.6)
+            found_loading_screen_func = lambda: self._ui_manager.wait_for_loading_screen(2.0) or \
+                                                self._template_finder.search_and_wait(
+                                                    ["NI2_SEARCH_0", "NI2_SEARCH_1"], threshold=0.8, time_out=0.5,
+                                                    use_grayscale=True).valid
+            Logger.debug("Clicking stairs...")
+            self._char.select_by_template(["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2"],
+                                          found_loading_screen_func,
+                                          threshold=0.63)
+            return True
+
+        return False
 
     def _orient_based_on_walls(self, img: np.ndarray, current_orientation: Orientation):
         # Let's crop 600x600px around the character and try to find walls on it
