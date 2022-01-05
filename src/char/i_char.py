@@ -213,3 +213,6 @@ class IChar:
         
     def kill_summoner(self) -> bool:
         raise ValueError("Arcane is not implemented!")
+
+    def kill_mephisto(self) -> bool:
+        raise ValueError("Mephisto is not implemented!")

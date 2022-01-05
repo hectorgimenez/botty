@@ -76,7 +76,8 @@ class Orientation:
 class Mephisto:
     WALL_BOTTOM_LEFT = ["MEPH_WALL_BOTTOM_LEFT_0", "MEPH_WALL_BOTTOM_LEFT_1"]
     WALL_BOTTOM_RIGHT = ["MEPH_WALL_BOTTOM_RIGHT_0", "MEPH_WALL_BOTTOM_RIGHT_1"]
-    WALL_TOP_LEFT = ["MEPH_WALL_TOP_LEFT_0", "MEPH_WALL_TOP_LEFT_1", "MEPH_WALL_TOP_LEFT_2", "MEPH_WALL_TOP_LEFT_3"]
+    WALL_TOP_LEFT = ["MEPH_WALL_TOP_LEFT_0", "MEPH_WALL_TOP_LEFT_1", "MEPH_WALL_TOP_LEFT_2", "MEPH_WALL_TOP_LEFT_3",
+                     "MEPH_WALL_TOP_LEFT_4"]
     WALL_TOP_RIGHT = ["MEPH_WALL_TOP_RIGHT_0", "MEPH_WALL_TOP_RIGHT_1", "MEPH_WALL_TOP_RIGHT_2",
                       "MEPH_WALL_TOP_RIGHT_3"]
 
@@ -122,11 +123,11 @@ class Mephisto:
             self._char.pre_buff()
         self._travel()
 
+        return self._kill_mephisto()
+
     def _travel(self):
         self._char.pre_move()
         current_orientation = Orientation.create_by_number(self._screen, 0, False)
-        previous_orientation = current_orientation
-        previous_jump_stuck = False
         while True:
             Logger.debug("Using orientation: " + str(current_orientation))
             score, img = self._tele(current_orientation.monitor_position)
@@ -135,25 +136,14 @@ class Mephisto:
                 break
 
             if score < 0.04:
-                previous_orientation = current_orientation
-                current_orientation = self._force_unstuck(current_orientation)
-                previous_jump_stuck = True
+                stairs_found, current_orientation = self._unstuck(current_orientation)
+                if stairs_found:
+                    break
                 continue
-
-            # Try to jump again into the previous direction
-            if previous_jump_stuck:
-                score, img = self._tele(previous_orientation.monitor_position)
-                if score < 0.04:
-                    previous_jump_stuck = False
-                else:
-                    current_orientation = self._orient_based_on_walls(img, current_orientation)
-                    if current_orientation is None:
-                        current_orientation = previous_orientation
 
             next_orientation = self._orient_based_on_walls(img, current_orientation)
             if next_orientation is not None:
-                previous_orientation = current_orientation
-                current_orientation = self._orient_based_on_walls(img, current_orientation)
+                current_orientation = next_orientation
 
     def _tele(self, position: Tuple[float, float]) -> Tuple[int, np.ndarray]:
         x_m, y_m = position[0], position[1]
@@ -174,16 +164,16 @@ class Mephisto:
 
     def _find_stairs(self, img: np.ndarray) -> bool:
         # Try to find the stairs to Level 3
-        stairs_found = self._template_finder.search(["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2"], img)
+        stairs_found = self._template_finder.search(
+            ["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2", "MEPH_STAIRS_3", "MEPH_STAIRS_4"], img)
         if stairs_found.valid:
             Logger.debug("The Durance of Hate Level 3 stairs found!")
             self._char.move(self._screen.convert_screen_to_monitor(stairs_found.position))
             wait(0.4, 0.6)
             found_loading_screen_func = lambda: self._ui_manager.wait_for_loading_screen(2.0) or \
                                                 self._template_finder.search_and_wait(
-                                                    ["NI2_SEARCH_0", "NI2_SEARCH_1"], threshold=0.8, time_out=0.5,
+                                                    ["MEPH_UPSTAIRS"], threshold=0.8, time_out=0.5,
                                                     use_grayscale=True).valid
-            Logger.debug("Clicking stairs...")
             self._char.select_by_template(["MEPH_STAIRS_0", "MEPH_STAIRS_1", "MEPH_STAIRS_2"],
                                           found_loading_screen_func,
                                           threshold=0.63)
@@ -195,6 +185,10 @@ class Mephisto:
         # Let's crop 600x600px around the character and try to find walls on it
         screen = self._screen.convert_abs_to_screen((0, 0))
         cropped = img[screen[1] - 300:screen[1] + 300, screen[0] - 300:screen[0] + 300]
+        #  if current_orientation.number == 0 or current_orientation.number == 3:
+        #      cropped = img[screen[1] - 300:screen[1] + 300, screen[0]:screen[0] + 600]
+        #  else:
+        #      cropped = img[screen[1] - 300:screen[1] + 300, screen[0] - 600:screen[0]]
 
         # Check if the template we are following still exists, in that case we can continue following it
         for t in current_orientation.template_to_follow:
@@ -241,14 +235,43 @@ class Mephisto:
 
         return current_orientation
 
-    def _force_unstuck(self, current_orientation: Orientation):
+    def _unstuck(self, current_orientation: Orientation) -> Tuple[bool, Orientation]:
         # Force orientation change. Best effort to detect logical direction
         Logger.debug("Player stuck! Changing orientation based on current orientation!")
+
         if current_orientation.number == 0:
-            return Orientation.create_by_number(self._screen, 1, False)
-        if current_orientation.number == 1:
-            return Orientation.create_by_number(self._screen, 2, False)
-        if current_orientation.number == 2:
-            return Orientation.create_by_number(self._screen, 3, False)
-        if current_orientation.number == 3:
-            return Orientation.create_by_number(self._screen, 0, False)
+            unstuck_orientation = Orientation.create_by_number(self._screen, 1, False)
+        elif current_orientation.number == 1:
+            unstuck_orientation = Orientation.create_by_number(self._screen, 2, False)
+        elif current_orientation.number == 2:
+            unstuck_orientation = Orientation.create_by_number(self._screen, 3, False)
+        else:
+            unstuck_orientation = Orientation.create_by_number(self._screen, 0, False)
+
+        # Try to jump again into the previous direction
+        _, img = self._tele(unstuck_orientation.monitor_position)
+        if self._find_stairs(img):
+            return True, current_orientation
+
+        next_orientation = self._orient_based_on_walls(img, current_orientation)
+
+        score, img = self._tele(current_orientation.monitor_position)
+        if self._find_stairs(img):
+            return True, current_orientation
+
+        if score > 0.04:
+            if next_orientation is not None:
+                return False, next_orientation
+            else:
+                return False, current_orientation
+
+        return False, unstuck_orientation
+
+    def _kill_mephisto(self):
+        Logger.debug("Let's kill Meph")
+        self._pather.traverse_nodes_fixed("mephisto_safe_dist", self._char)
+        self._char.kill_mephisto()
+        wait(0.2, 0.3)
+        picked_up_items = self._pickit.pick_up_items(self._char)
+
+        return Location.A3_MEPHISTO_END, picked_up_items

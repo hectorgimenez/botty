@@ -74,6 +74,7 @@ class Location:
     A2_ARC_END = "a2_arc_end"
     # Mephisto
     A3_MEPHISTO_START = "a3_mephisto_start"
+    A3_MEPHISTO_END = "a3_mephisto_end"
 
 
 class Pather:

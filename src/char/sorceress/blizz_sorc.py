@@ -228,8 +228,15 @@ class BlizzSorc(Sorceress):
             self._ice_blast(cast_pos_abs, spray=11)
         wait(self._cast_duration, self._cast_duration + 0.2)
         return True
-    
-    
+
+    def kill_mephisto(self) -> bool:
+        cast_pos_abs = np.array([-80, -80])
+        for _ in range(int(self._char_config["atk_len_mephisto"])):
+            self._blizzard(cast_pos_abs, spray=11)
+            self._ice_blast(cast_pos_abs, spray=11)
+        return True
+
+
 if __name__ == "__main__":
     import os
     import keyboard

@@ -102,6 +102,7 @@ run_shenk=0
 | atk_len_eldritch   | Attack length for hdin or number of attack sequences for sorc when fighting eldritch |
 | atk_len_shenk      | Attack length for hdin or number of attack sequences for sorc when fighting shenk |
 | atk_len_nihlatak   | Attack length for hdin or number of attack sequences for sorc when fighting nihlatak |
+| atk_len_mephisto   | Attack length for hdin or number of attack sequences for sorc when fighting mephisto |
 | take_health_potion | Health percentage when healing potion will be used. e.g. 0.6 = 60% helath |
 | take_mana_potion   | Mana percentage when mana potion will be used |
 | take_rejuv_potion_health | Health percentag when rejuv potion will be used |

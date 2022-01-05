@@ -120,6 +120,7 @@ class Config:
             "atk_len_eldritch": float(self._select_val("char", "atk_len_eldritch")),
             "atk_len_shenk": float(self._select_val("char", "atk_len_shenk")),
             "atk_len_nihlatak": float(self._select_val("char", "atk_len_nihlatak")),
+            "atk_len_mephisto": float(self._select_val("char", "atk_len_mephisto")),
             "always_repair": bool(int(self._select_val("char", "always_repair"))),
         }
 
